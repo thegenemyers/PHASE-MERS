@@ -21,11 +21,13 @@
 #include "libfastk.h"
 
 static char *Usage = 
-            " [-L[s]] [-h<int>:<int>] [-m<%:density> [-d<int>:<int]] <source>[.ktab]";
+            " [-L[s]] [-h<int>:<int>] [-m<%:density> [-d<int>:<int]] [-N<path_name>] <source>[.ktab]";
 
 static int HAPLO_LOW, HAPLO_HGH;   //  Count range for acceptable het k-mers
 
 static int DIPLO_LOW, DIPLO_HGH;   //  Count range for acceptable homo k-mers
+
+static char *OUT_NAME;             //  Name for output tables (if no -L)
 
 static int MODULO = 1009;
 
@@ -191,17 +193,25 @@ void Find_Haplo_Pairs(Kmer_Stream *T)
   ctop  = cache + 4096*ibyte;
 
   if (!LIST)
-    { pindex = Malloc(sizeof(int64)*0x10001,"Table indices");
+    { char *root, *pwd;
+
+      pindex = Malloc(sizeof(int64)*0x10001,"Table indices");
       if (pindex == NULL)
         exit (1);
       bzero(pindex,sizeof(int64)*0x10000);
 
-      uout = fopen(".UPPER.ktab.1","w");
-      lout = fopen(".LOWER.ktab.1","w");
+      pwd = PathTo(OUT_NAME);
+      root = Root(OUT_NAME,".ktab");
+
+      uout = fopen(Catenate(pwd,"/",root,".U.ktab.1"),"w");
+      lout = fopen(Catenate(pwd,"/",root,".L.ktab.1"),"w");
       if (uout == NULL || lout == NULL)
         { fprintf(stderr,"%s: Can't open tables for writing\n",Prog_Name);
           exit (1);
         }
+
+      free(root);
+      free(pwd);
       
       fwrite(&kmer,sizeof(int),1,uout);
       fwrite(pindex,sizeof(int64),1,uout);
@@ -399,11 +409,12 @@ void Find_Haplo_Pairs(Kmer_Stream *T)
     printf("\nA total of %d hetero-sites found\n",ictr>>2);
 
   else
-    { int i;
-      int one = 1;
-      int two = 2;
+    { int   i;
+      int   one = 1;
+      int   two = 2;
+      char *root, *pwd;
 
-      for (i = 1; i < 0x10000; i++)
+        for (i = 1; i < 0x10000; i++)
         pindex[i] += pindex[i-1];
       pindex[0x10000] = pindex[0xffff] + 1;
 
@@ -418,8 +429,12 @@ void Find_Haplo_Pairs(Kmer_Stream *T)
       fclose(uout);
       fclose(lout);
 
-      uout = fopen("UPPER.ktab","w");
-      lout = fopen("LOWER.ktab","w");
+      pwd = PathTo(OUT_NAME);
+      root = Root(OUT_NAME,".ktab");
+
+      uout = fopen(Catenate(pwd,"/",root,".U.ktab"),"w");
+      lout = fopen(Catenate(pwd,"/",root,".L.ktab"),"w");
+
       if (uout == NULL || lout == NULL)
         { fprintf(stderr,"%s: Can't open tables for writing\n",Prog_Name);
           exit (1);
@@ -436,6 +451,9 @@ void Find_Haplo_Pairs(Kmer_Stream *T)
       fwrite(&one,sizeof(int),1,lout);
       fwrite(&two,sizeof(int),1,lout);
       fwrite(pindex,sizeof(int64),0x10001,lout);
+
+      free(root);
+      free(pwd);
 
       fclose(uout);
       fclose(lout);
@@ -469,6 +487,8 @@ int main(int argc, char *argv[])
 
     DIPLO_LOW = 1;
     DIPLO_HGH = 0x7fff;
+
+    OUT_NAME  = NULL;
 
     MOD_THR   = -1;
 
@@ -548,10 +568,16 @@ int main(int argc, char *argv[])
                 exit (1);
               }
             break;
+          case 'N':
+            OUT_NAME = argv[i]+2;
+            break;
         }
       else
         argv[j++] = argv[i];
     argc = j;
+
+    if (OUT_NAME == NULL)
+      OUT_NAME = argv[1];
 
     if (argc != 2)
       { fprintf(stderr,"Usage: %s %s\n",Prog_Name,Usage);
@@ -561,13 +587,14 @@ int main(int argc, char *argv[])
         fprintf(stderr,"      -d: Accept only homo-mers with count in given range (if -m).\n");
         fprintf(stderr,"      -L: Produce a listing (default is a table).\n");
         fprintf(stderr,"     -Ls: Produce a sorted listing.\n");
+        fprintf(stderr,"      -N: Use given path for path name prefix.\n");
         exit (1);
       }
   }
 
-  T = Open_Kmer_Stream(argv[1]);
+  T = Open_Kmer_Stream(OUT_NAME);
   if (T == NULL)
-    { fprintf(stderr,"%s: Cannot open table %s\n",Prog_Name,argv[1]);
+    { fprintf(stderr,"%s: Cannot open table %s\n",Prog_Name,OUT_NAME);
       exit (1);
     }
 

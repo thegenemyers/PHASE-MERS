@@ -1,4 +1,4 @@
-# Phaser: A K-mer phase chain algorithm  
+# Phasmer: A FastK K-mer phase chaining utility  
 <font size ="4">**_Author:  Haynes Heaton, Richard Durbin, Gene Myers_**<br>
 **_First:   April 5, 2021_**<br>
 
@@ -9,19 +9,20 @@
 
 <a name="phasemer"></a>
 ```
-Phasemer [-L[s]] [-h<int>:<int>] [-m<read:%> [-d<int>,<int>]] <source>[.ktab]
+Phasemer [-L[s]] [-h<int>:<int>] [-m<read:%> [-d<int>,<int>]] [-N<path_name>] <source>[.ktab]
 ```
 
 In a scan of the FastK table \<source>, Phasemer identifies all bundles of 2&#8209;4 k&#8209;mers that differ only in their middle base, i.e. the &lfloor;k/2&rfloor;<sup>th</sup> base.
-These k&#8209;mers we call **het&#8209;mers** and all others we call **hom&#8209;mers**.
+These k&#8209;mers we call **het&#8209;mers** and all others we call **hom&#8209;mers**
+(pronounced \`homers\`).
 
 If the &#8209;h option is given then only k&#8209;mers whose count is in the given
 range (inclusive) are considered legitimate het&#8209;mers, otherwise all are accepted.
 If the &#8209;d option is given then only k&#8209;mers whose count is in the given
-range (inclusive) are considered legitimate hom&#8209;mer, otherwise all are accepted.
+range (inclusive) are considered legitimate hom&#8209;mers, otherwise all are accepted.
 
-Phasemer either produces tables or pints to stdout depending on the setting of
-its' options as desscribed below.
+Phasemer either produces tables or prints to stdout depending on the setting of
+its' options as described below.
 
 ###Listing Options:
 
@@ -51,7 +52,7 @@ particular order) along with the count of each.  For example,
 
     ...
 ```
-in response to <code>Phasemer -L -h8:40 CBS.ktab</code> where CBS is a 50X HiFi data set of
+in response to `Phasemer -L -h8:40 CBS.ktab` where CBS is a 50X HiFi data set of
 Cabernet Sauvignon.
 
 With the &#8209;Ls option set, Phasemer produces an alphabetical listing of each het&#8209;mer.
@@ -78,10 +79,33 @@ For example, in this listing:
         128/t: aaaaaaaaaaaaaaaaaaaaTagaaatgatgacttgtatg
     ...
 ```
-<code>272/g</code> indicates the given k-mer comes from the 272'nd het-bundle and is the
+`272/g<` indicates the given k-mer comes from the 272'nd het-bundle and is the
 variant that has a 'g' as its middle base.
 
 ###Table Building Options:
 
-When a -L option is not set, then Phasemer produces 2 tables, for now 
+When the &#8209;L option is not set, then Phasemer produces FastK tables as output, optionally using
+the path name of the &#8209;N option as the root name for the table.  Ideally Phasemer would produce
+a single table, say `HETS`, of relevant k-mers each associated with a 4 byte integer that encodes
+a k&#8209;mer's type and id (more on this in a moment).  But FastK limits the associated values to 2&#8209;byte counts, so to work around this, Phasemer produces **two** tables, `HETS.U` and `HETS.L`
+that contain exactly the same k-mers but the "U"&#8209;table counts give the upper 2 bytes of the
+desired integer and the "L"&#8209;table counts give the lower 2 bytes.  By reading both tables in
+sync or producing relative profiles for both and scanning both in sync, one can combine the
+pair of 2&#8209;byte counts to construct the desired integer on the fly.
 
+If the &#8209;N option is set, then the table names use the specified path as the root name.
+If absent, then the root name of the source is used.  The option has no effect for the
+list options involving &#8209;L.
+
+With the &#8209;m option *not* set, Phasemer produces tables for the legitimate het&#8209;mers,
+and if &#8209;m is set then it produces tables that contain both the legitimate het-mers
+and &#8209;m percent of the available, legitimate hom&#8209;mers using the "modimizer" concept.
+
+The integer associated with each k-mer gives a 29&#8209;bit id, and a 3&#8209;bit type.
+Every het **bundle** gets an id and every modimizer-selected hom-mer individually gets an id,
+where the id's begin at 0 and are consecutively allocated to bundles and hom&#8209;mers.  The
+id is in the high order 29-bits of a k&#8209;-mers' integer.  The lower order 3 bits contain 0
+if the k&#8209;mer is a hom&#8209;mer, and 1, 2, 3, or 4 if it is a het&#8209;mer, where the
+codes correspond to a, c, g, t as the variant base, respectively.  In this way, without having
+to consult the underly squence of the k&#8209;mer, one immediately knows which het&#8209;mer
+of a bundle is being addressed.
