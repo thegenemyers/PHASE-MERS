@@ -9,7 +9,8 @@
 
 <a name="phasemer"></a>
 ```
-Phasemer [-L[s]] [-h<int>:<int>] [-m<read:%> [-d<int>,<int>]] [-N<path_name>] <source>[.ktab]
+1. Phasemer [-L[s]] [-h<int>:<int>] [-m<read:%> [-d<int>,<int>]]
+                        [-N<path_name>] <source>[.ktab]
 ```
 
 In a scan of the FastK table \<source>, Phasemer identifies all bundles of 2&#8209;4 k&#8209;mers that differ only in their middle base, i.e. the &lfloor;k/2&rfloor;<sup>th</sup> base.
@@ -109,3 +110,24 @@ if the k&#8209;mer is a hom&#8209;mer, and 1, 2, 3, or 4 if it is a het&#8209;me
 codes correspond to a, c, g, t as the variant base, respectively.  In this way, without having
 to consult the underly squence of the k&#8209;mer, one immediately knows which het&#8209;mer
 of a bundle is being addressed.
+
+
+<a name="phasemer"></a>
+```
+Phasemap [-D<self>[.prof]] <upper>[.prof] <lower>[.prof]
+```
+
+Given the upper and lower profiles built from the 2 tables output by Phasemer, Phasemap
+scans the reads in order and outputs the locations and id's of all the het- and hom-mers
+found in each read in order along the read.
+
+Overall one does the following:
+
+```
+FastK -t? -p Foo               //  Build a table Foo.ktab and profile Foo.prof of HiFi data set Foo
+Phasemer -m? Foo -NMers        //  Build tables Mers.U.ktab and Mers.L.ktab of het- and hom-mers
+FastK -p:Mers.U Foo -NMap.U    //  Build relative profiles Map.U.prof of Foo w.r.t Mers.U
+FastK -p:Mers.L Foo -NMap.L    //  Build relative profiles Map.L.prof of Foo w.r.t Mers.L
+Phaselink -DFoo Map.U Map.L    //  Scan all profiles to output site locations in each read
+
+

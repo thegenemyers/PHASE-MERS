@@ -4,7 +4,7 @@ CFLAGS = -O3 -Wall -Wextra -Wno-unused-result -fno-strict-aliasing
 
 CC = clang
 
-ALL = Phasemer
+ALL = Phasemer Phasemap
 
 all: $(ALL)
 
@@ -13,6 +13,9 @@ libfastk.h : gene_core.h
 
 Phasemer: Phasemer.c libfastk.c libfastk.h
 	$(CC) $(CFLAGS) -o Phasemer Phasemer.c libfastk.c -lpthread -lm
+
+Phasemap: Phasemap.c libfastk.c libfastk.h DB.c DB.h QV.c QV.h
+	$(CC) $(CFLAGS) -o Phasemap Phasemap.c libfastk.c DB.c QV.c -lpthread -lm
 
 clean:
 	rm -f $(ALL)

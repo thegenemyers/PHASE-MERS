@@ -175,6 +175,9 @@ void Find_Haplo_Pairs(Kmer_Stream *T)
   FILE  *uout, *lout;
   int64 *pindex;
 
+  int64  nhet, nhom;
+  int64  ihet, ihom;
+
   (void) print_seq;
 
   setup_fmer_table();
@@ -192,6 +195,9 @@ void Find_Haplo_Pairs(Kmer_Stream *T)
   cptr  = cache;
   ctop  = cache + 4096*ibyte;
 
+  nhet = nhom = 0;
+  ihet = ihom = 0;
+
   if (!LIST)
     { char *root, *pwd;
 
@@ -203,8 +209,8 @@ void Find_Haplo_Pairs(Kmer_Stream *T)
       pwd = PathTo(OUT_NAME);
       root = Root(OUT_NAME,".ktab");
 
-      uout = fopen(Catenate(pwd,"/",root,".U.ktab.1"),"w");
-      lout = fopen(Catenate(pwd,"/",root,".L.ktab.1"),"w");
+      uout = fopen(Catenate(pwd,"/.",root,".U.ktab.1"),"w");
+      lout = fopen(Catenate(pwd,"/.",root,".L.ktab.1"),"w");
       if (uout == NULL || lout == NULL)
         { fprintf(stderr,"%s: Can't open tables for writing\n",Prog_Name);
           exit (1);
@@ -332,9 +338,11 @@ void Find_Haplo_Pairs(Kmer_Stream *T)
               else
                 { for (i = 0; i < c; i++)
                     { uint8 *fp = finger[good[i]];
+                      ihet +=*ID1_PTR(fp);
                       *ID1_PTR(fp) = (ictr >> 16);
                       *ID2_PTR(fp) = (ictr & 0xffff) | (good[i]+1);
                     }
+                  nhet += 1;
                   ictr += 8;
                 }
             }
@@ -389,6 +397,8 @@ void Find_Haplo_Pairs(Kmer_Stream *T)
                         print_seq(cptr,kmer);
                         printf("\n");
 #endif
+                        ihom += cn;
+                        nhom += 1;
 
                         *ID1_PTR(cptr) = (ictr>>16);
                         pref = ((cptr[0] << 8) | cptr[1]);
@@ -405,9 +415,21 @@ void Find_Haplo_Pairs(Kmer_Stream *T)
           }
     }
 
-  if (LIST)
-    printf("\nA total of %d hetero-sites found\n",ictr>>2);
+  printf("Found ");
+  Print_Number(nhet,0,stdout);
+  printf(" het-bundles totalling ");
+  Print_Number(ihet,0,stdout);
+  printf(" instances\n");
+  if (MOD_THR >= 0)
+    { printf("Found ");
+      Print_Number(nhom,0,stdout);
+      printf(" hom-mers totalling ");
+      Print_Number(ihom,0,stdout);
+      printf(" instances\n");
+    }
 
+  if (LIST)
+    printf("\nA total of %d hetero-sites found\n",ictr>>3);
   else
     { int   i;
       int   one = 1;
@@ -477,7 +499,7 @@ int main(int argc, char *argv[])
 
     (void) flags;
 
-    ARG_INIT("Haplex");
+    ARG_INIT("Phasmer");
 
     LIST   = 0;
     SORTED = 1;
@@ -592,9 +614,9 @@ int main(int argc, char *argv[])
       }
   }
 
-  T = Open_Kmer_Stream(OUT_NAME);
+  T = Open_Kmer_Stream(argv[1]);
   if (T == NULL)
-    { fprintf(stderr,"%s: Cannot open table %s\n",Prog_Name,OUT_NAME);
+    { fprintf(stderr,"%s: Cannot open table %s\n",Prog_Name,argv[1]);
       exit (1);
     }
 
