@@ -15,8 +15,9 @@
 #include <math.h>
 
 #include "libfastk.h"
-
 #include "DB.h"
+
+#undef DEBUG
 
 static char *Usage = "[-D<dazz_db>] <lower>:[.prof] <upper>[.prof]";
 
@@ -27,7 +28,7 @@ static void Scan_All(Profile_Index *LOW, Profile_Index *HGH, DAZZ_DB *DBP, Profi
   uint8     *rseq, *radj;
   uint16    *lowprof, *hghprof, *dbsprof;
   int        pmax, plen;
-  int        nreads, km1;
+  int        nreads, kmer, km1;
   int        i, id;
 
   pmax    = 20000;
@@ -35,7 +36,8 @@ static void Scan_All(Profile_Index *LOW, Profile_Index *HGH, DAZZ_DB *DBP, Profi
   hghprof = lowprof + pmax;
   dbsprof = hghprof + pmax;
 
-  km1     = LOW->kmer - 1;
+  kmer    = LOW->kmer;
+  km1     = kmer - 1;
   nreads  = LOW->nbase[LOW->nparts-1];
   if (DBP != NULL)
     { rseq = (uint8 *) New_Read_Buffer(DBP);
@@ -72,6 +74,8 @@ static void Scan_All(Profile_Index *LOW, Profile_Index *HGH, DAZZ_DB *DBP, Profi
                 }
             }
         }
+
+#ifdef DEBUG
       printf("\nRead %d:\n",id+1);
       if (DBP != NULL)
         { for (i = 0; i < km1; i++)
@@ -109,6 +113,24 @@ static void Scan_All(Profile_Index *LOW, Profile_Index *HGH, DAZZ_DB *DBP, Profi
             else
               printf(" %5d: 0\n",i);
           }
+#else
+      printf("\nRead\t%d\n",id+1);
+      for (i = 0; i < plen; i++)
+        { uint32 hgh = hghprof[i];
+          uint32 low = lowprof[i];
+          uint32 code = (hgh << 16 | low);
+
+          if (code > 0)
+            { if ((code & 0x7) == 0)
+                printf("\t%d\t%d\t-",i+kmer,code>>3);
+              else
+                printf("\t%d\t%d\t%c",i+kmer,code>>3,DNA[(code&0x7)-1]);
+              if (DPR != NULL)
+                printf("\t%5d",dbsprof[i]);
+              printf("\n");
+            }
+        }
+#endif
     }
 
   free(lowprof);
