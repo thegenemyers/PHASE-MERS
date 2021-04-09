@@ -2,7 +2,11 @@
 <font size ="4">**_Author:  Haynes Heaton, Richard Durbin, Gene Myers_**<br>
 **_First:   April 5, 2021_**<br>
 
-  - [Phasemer](#phasemer): produce a table or listing of het-kmers and optional homo-kmers
+&nbsp;
+
+  - [Phasemer](#phasemer): produce a table or listing of het-kmers and optional homo-kers
+  
+  - [Phasemap](#phasemap): maps the phase-mers to locations along a read data set 
 
 &nbsp;
 
@@ -111,15 +115,20 @@ codes correspond to a, c, g, t as the variant base, respectively.  In this way, 
 to consult the underly squence of the k&#8209;mer, one immediately knows which het&#8209;mer
 of a bundle is being addressed.
 
+&nbsp;
 
-<a name="phasemer"></a>
+<a name="phasemap"></a>
 ```
-Phasemap [-D<self>[.prof]] <upper>[.prof] <lower>[.prof]
+2. Phasemap [-D<self>[.prof]] <upper>[.prof] <lower>[.prof]
 ```
 
 Given the upper and lower profiles built from the 2 tables output by Phasemer, Phasemap
 scans the reads in order and outputs the locations and id's of all the het- and hom-mers
-found in each read in order along the read.
+found in each read in order along the read.  (*Not complete*).
+
+
+&nbsp;
+
 
 Overall one does the following:
 
@@ -128,6 +137,6 @@ FastK -t? -p Foo               //  Build a table Foo.ktab and profile Foo.prof o
 Phasemer -m? Foo -NMers        //  Build tables Mers.U.ktab and Mers.L.ktab of het- and hom-mers
 FastK -p:Mers.U Foo -NMap.U    //  Build relative profiles Map.U.prof of Foo w.r.t Mers.U
 FastK -p:Mers.L Foo -NMap.L    //  Build relative profiles Map.L.prof of Foo w.r.t Mers.L
-Phaselink -DFoo Map.U Map.L    //  Scan all profiles to output site locations in each read
+Phasemap -DFoo Map.U Map.L     //  Scan all profiles to output site locations in each read
 
 
