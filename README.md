@@ -2,6 +2,8 @@
 <font size ="4">**_Author:  Haynes Heaton, Richard Durbin, Gene Myers_**<br>
 **_First:   April 5, 2021_**<br>
 
+This is an 
+
 &nbsp;
 
   - [Phasemer](#phasemer): produce a table or listing of het-kmers and optional homo-kers
@@ -13,7 +15,7 @@
 
 <a name="phasemer"></a>
 ```
-1. Phasemer [-L[s]] [-h<int>:<int>] [-m<read:%> [-d<int>,<int>]]
+1. Phasemer [-L[s]] [-h<int>:<int>] [-m<read:%> [-d<int>:<int>]]
                         [-N<path_name>] <source>[.ktab]
 ```
 

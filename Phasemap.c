@@ -68,7 +68,7 @@ static void Scan_All(Profile_Index *LOW, Profile_Index *HGH, DAZZ_DB *DBP, Profi
             }
           if (DPR != NULL)
             { if (Fetch_Profile(DPR,(int64) id,pmax,dbsprof) != plen)
-                { fprintf(stderr,"%s: Het-mer and DB profiles for id %d are not the same length !?\n",
+                { fprintf(stderr,"%s: Het-mer and DB profiles for id %d are not the same length?\n",
                                  Prog_Name,id+1);
                   exit (1);
                 }
