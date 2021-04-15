@@ -2,7 +2,8 @@
 <font size ="4">**_Author:  Haynes Heaton, Richard Durbin, Gene Myers_**<br>
 **_First:   April 5, 2021_**<br>
 
-This is an 
+This is a repository under initial development so nothing is guaranteed to wokr or may be
+broken at any time :-)
 
 &nbsp;
 
