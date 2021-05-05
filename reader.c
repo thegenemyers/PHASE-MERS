@@ -309,11 +309,11 @@ static Entry *Get_DB_Entry()
 
 /*******************************************************************************************
  *
- *  Open a file and return it fid and type
+ *  Open a file and return a pointer to an appropriate line fetcher depending on type
  *
  ********************************************************************************************/
 
-  //  Open and get info about each input file
+  //  Open and get info about each input file, return line fetcher based on said
 
 Fetcher Open_File(char *arg)
 
@@ -347,7 +347,7 @@ Fetcher Open_File(char *arg)
 
   switch (i)
   { case 0:
-      fclose(fid);
+      fclose(fid);    //  Don't want to include HTSLIB so don't support
       return (NULL);
 /*
       cid = cram_open(path);

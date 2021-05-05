@@ -174,8 +174,8 @@ the 23bp bar-code and linker.  We want a table of the all 21-mers occuring 6 or 
 
 ```
 FastK -v -k21 -t6 -bc23 -T8 *R1.fastq.gz -NForward
-FastK -v -k21 -t6 -T8 *R1.fastq.gz -NReverse
-Logex -h -T8 'Fish=A|+B' Forward Reverse
+FastK -v -k21 -t6 -T8 *R2.fastq.gz -NReverse
+Logex -h1000 -T8 'Fish=A|+B' Forward Reverse
 Fastrm Forward Reverse
 ```
 
@@ -216,7 +216,7 @@ and took about 31 minutes on my laptop with the 4 profiles occupying 13.6GB of d
 FastK -v -k21 -p:Phase.L -T8 *R1.fastq.gz -NForward.L
 FastK -v -k21 -p:Phase.U -T8 *R1.fastq.gz -NForward.U
 FastK -v -k21 -p:Phase.L -T8 *R2.fastq.gz -NReverse.L
-FastK -v -k21 -p:Phase.L -T8 *R2.fastq.gz -NReverse.U
+FastK -v -k21 -p:Phase.U -T8 *R2.fastq.gz -NReverse.U
 > ls
 Fish_L1_R1.fastq.gz    Fish_L3_R1.fastq.gz    Phase.L.ktab      Reverse.L.prof
 Fish_L1_R2.fastq.gz    Fish_L3_R2.fastq.gz    Phase.U.ktab      Reverse.U.prof

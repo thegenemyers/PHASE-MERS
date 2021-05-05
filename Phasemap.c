@@ -25,7 +25,7 @@ static char *Usage[] = { " [-10X] <lower>:[.prof] <upper>[.prof]",
                          "    <source>[.cram|.[bs]am|.db|.dam|.f[ast][aq][.gz] ..."
                        };
 
-static char DNA[4] = { 'A', 'C', 'G', 'T' };
+static char DNA[7] = { 'A', 'C', 'G', 'T', 'X', 'X', 'X' };
 
 static uint8 code[128] =
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -73,7 +73,7 @@ static int is_minimal(char *seq, int len)
 static int64 Scan_File(Profile_Index *LOW, Profile_Index *HGH, char *input, int64 beg) 
 { char      *rseq;
   uint16    *lowprof, *hghprof;
-  int        pmax, plen;
+  int        pmax, plen, olen;
   int        nreads, kmer, km1;
   int        i, id;
 
@@ -107,23 +107,24 @@ static int64 Scan_File(Profile_Index *LOW, Profile_Index *HGH, char *input, int6
           hghprof = lowprof + pmax;
           Fetch_Profile(LOW,(int64) id,pmax,lowprof);
         }
-      if (Fetch_Profile(HGH,(int64) id,pmax,hghprof) != plen)
-        { fprintf(stderr,"%s: Low & Hgh profiles for id %d are not the same length !?\n",
-                         Prog_Name,id+1);
+      olen = Fetch_Profile(HGH,(int64) id,pmax,hghprof);
+      if (olen != plen)
+        { fprintf(stderr,"%s: Low (%d) & Hgh (%d) profiles for read %d are not the same length !?\n",
+                         Prog_Name,plen,olen,id+1);
           exit (1);
         }
       if ((int) read->len != plen+km1)
-        { fprintf(stderr,"%s: Sequence and profile not the same length?\n",
-                         Prog_Name);
+        { fprintf(stderr,"%s: Sequence (%d) and profile (%d) for read %d not the same length?\n",
+                         Prog_Name,(int) read->len,plen+km1,id+1);
           exit (1);
         }
 
 #ifdef DEBUG
-      printf("\nRead %d:\n",id+1);
+      printf("\nRead %d %d:\n",id+1,plen);
       for (i = 0; i < BC_PREFIX+km1; i++)
         { if (i == 16)
             printf(" ---------\n");
-          printf(" %5d: %c\n",i-(BC_PREFIX+km1),rseq[i]);
+          printf(" %5d: %c\n",i-km1,rseq[i]);
         }
       for (i = BC_PREFIX; i < plen; i++)
         { uint32 hgh = hghprof[i];
@@ -141,34 +142,37 @@ static int64 Scan_File(Profile_Index *LOW, Profile_Index *HGH, char *input, int6
                 printf("\t-\n");
             }
           else
-            printf(" %5d: %c 0",i,rseq[i+km1]);
-          printf("\n");
+            printf(" %5d: %c 0\n",i,rseq[i+km1]);
         }
 #else
 
-      printf("R\t%d\t",id+1);
+      //  Haynes, your code here!
+
+      printf("R\t%d\t",id+1);   //  Processing read id+1
       if (BC_PREFIX == 0)
-        printf("-\n");
+        printf("-\n");               // A reverse read, no barcode
       else
-        { for (i = 0; i < 16; i++)
+        { for (i = 0; i < 16; i++)   // A forward read, barcode is rseq[0..15]
             putchar(rseq[i]);
           putchar('\n');
         }
+
+      //  For each position along read, excluding barcode & linker if there do:
 
       for (i = BC_PREFIX; i < plen; i++)
         { uint32 hgh = hghprof[i];
           uint32 low = lowprof[i];
           uint32 code = (hgh << 16 | low);
 
-          if (code > 0)
+          if (code > 0)                    //  There is a phase-mer at position i (code > 0)
             { if ((code & 0x7) == 0)
-                printf("H\t%d\t%10d",i+kmer,code>>3);
+                printf("H\t%d\t%10d",i+kmer,code>>3);                      //  Homo-mer
               else
-                printf("%c\t%d\t%10d",DNA[(code&0x7)-1],i+kmer,code>>3);
+                printf("%c\t%d\t%10d",DNA[(code&0x7)-1],i+kmer,code>>3);   //  Het-mer
               if (is_minimal(rseq+i,kmer))
-                printf("\t+\n");
+                printf("\t+\n");             //  It is in the forward orientation
               else
-                printf("\t-\n");
+                printf("\t-\n");             //  It is in the reverse orientation
             }
         }
 #endif
