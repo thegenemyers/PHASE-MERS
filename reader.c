@@ -352,7 +352,8 @@ Fetcher Open_File(char *arg)
 /*
       cid = cram_open(path);
       if (cid == NULL)
-        {
+        { fprintf(stderr,"%s: Cannot open %s as a cram file\n",Prog_Name,path);
+          exit (1);
         }
       return (Get_Cram_Entry);
 */

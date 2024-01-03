@@ -645,9 +645,9 @@ static void compress_comp(char *s, int len, uint8 *t)
   s2 = s1-1;
   s3 = s2-1;
 
-  c = s0[0];
-  d = s1[0];
-  e = s2[0];
+  c = s1[0];
+  d = s2[0];
+  e = s3[0];
   s1[0] = s2[0] = s3[0] = 't';
 
   for (i = len-1; i >= 0; i -= 4)
@@ -669,7 +669,7 @@ int64 Find_Kmer(Kmer_Table *_T, char *kseq)
   int64 *index = T->index;
 
   uint8  cmp[T->kbyte], *c;
-  int64  l, r, m;
+  int64  l, r, m, t;
 
   //  kseq must be at least kmer bp long
 
@@ -688,9 +688,9 @@ int64 Find_Kmer(Kmer_Table *_T, char *kseq)
     l = index[m-1];
   if (l >= T->nels)
     return (-1);
-  while (index[m] == l)
-    m += 1;
-  r = index[m];
+  r = t = index[m];
+  if (r <= l)
+    return (-1);
 
   // smallest l s.t. KMER(l) >= (kmer) c  (or nels if does not exist)
 
@@ -702,7 +702,7 @@ int64 Find_Kmer(Kmer_Table *_T, char *kseq)
         r = m;
     }
 
-  if (l >= T->nels || mycmp(table+l*pbyte,c,hbyte) != 0)
+  if (l >= t || mycmp(table+l*pbyte,c,hbyte) != 0)
     return (-1);
 
   return (l);
@@ -890,10 +890,19 @@ Kmer_Stream *Open_Kmer_Stream(char *name)
   S->part  = 1;
 
   More_Kmer_Stream(S);
+
   S->cidx  = 0;
-  S->cpre  = 0;
-  while (S->index[S->cpre] <= 0)
-    S->cpre += 1;
+
+  if (S->cidx >= S->nels)
+    { S->csuf = NULL;
+      S->cpre = S->ixlen;
+      S->part = S->nthr+1;
+    }
+  else
+    { S->cpre  = 0;
+      while (S->index[S->cpre] <= 0)
+        S->cpre += 1;
+    }
 
   return ((Kmer_Stream *) S);
 }
@@ -902,7 +911,7 @@ Kmer_Stream *Clone_Kmer_Stream(Kmer_Stream *O)
 { _Kmer_Stream *S;
   int copn;
 
-  S        = Malloc(sizeof(_Kmer_Stream),"Allocating table record");
+  S = Malloc(sizeof(_Kmer_Stream),"Allocating table record");
   if (S == NULL)
     exit (1);
 
@@ -913,10 +922,11 @@ Kmer_Stream *Clone_Kmer_Stream(Kmer_Stream *O)
   S->name  = Malloc(S->nlen+20,"Allocating k-mer buffer\n");
   if (S->table == NULL || S->name == NULL)
     exit (1);
+  strncpy(S->name,STREAM(O)->name,S->nlen);
 
   //  Set position to beginning
 
-  sprintf(S->name,"%s%d",STREAM(O)->name,1);
+  sprintf(S->name+S->nlen,"%d",1);
   copn = open(S->name,O_RDONLY);
   lseek(copn,sizeof(int)+sizeof(int64),SEEK_SET);
 
@@ -925,9 +935,17 @@ Kmer_Stream *Clone_Kmer_Stream(Kmer_Stream *O)
 
   More_Kmer_Stream(S);
   S->cidx  = 0;
-  S->cpre  = 0;
-  while (S->index[S->cpre] <= 0)
-    S->cpre += 1;
+
+  if (S->cidx >= S->nels)
+    { S->csuf = NULL;
+      S->cpre = S->ixlen;
+      S->part = S->nthr+1;
+    }
+  else
+    { S->cpre  = 0;
+      while (S->index[S->cpre] <= 0)
+        S->cpre += 1;
+    }
 
   return ((Kmer_Stream *) S);
 }
@@ -946,6 +964,168 @@ void Free_Kmer_Stream(Kmer_Stream *_S)
     close(S->copn);
   free(S);
 }
+
+
+/****************************************************************************************
+ *
+ *  Hidden, for 1-code production useful to now the size of the largest prefix bucket
+ *
+ *****************************************************************************************/
+
+int Max_Bucket(Kmer_Stream *_S)
+{ _Kmer_Stream *S = STREAM(_S);
+  int64  pidx, *curr;
+  int    i, s, max;
+
+  pidx = 0;
+  curr = S->index;
+  max  = 0;
+  for (i = 0; i < S->ixlen; i++)
+    { s = curr[i] - pidx;
+      if (s > max)
+        max = s;
+      pidx = curr[i];
+    }
+  return (max);
+}
+
+
+/****************************************************************************************
+ *
+ *  Hidden, specialized version of Open, Clone, & Free used by Fastmerge
+ *
+ *****************************************************************************************/
+
+int Open_Kmer_Cache(Kmer_Stream *_S, int64 bidx, int64 eidx, int bpre, int epre,
+                    char *where, uint8 *buffer, int buflen)
+{ _Kmer_Stream *S = STREAM(_S);
+  int   f, g;
+  int   p, len;
+  int64 beps, leps;
+  int64 beg, end;
+  char *name, *r;
+
+  memmove(S->index,S->index+bpre,((epre-bpre)+1)*sizeof(int64));
+  S->index = Realloc(S->index,((epre-bpre)+1)*sizeof(int64),"Reallocating prefix index");
+  S->index -= bpre;
+
+  if (S->part <= S->nthr)
+    close(S->copn);
+
+  name = Malloc(S->nlen+strlen(where)+10,"Reallocing table name");
+  if (name == NULL)
+    exit (1);
+
+  r = rindex(S->name,'/');
+  S->name[S->nlen] = '\0';
+  sprintf(name,"%s/%scache",where,r+2);
+  S->name[S->nlen] = '.';
+
+  g = open(name,O_CREAT|O_TRUNC|O_RDWR,S_IRWXU);
+  if (g < 0)
+    return (1);
+
+  p = 0;
+  while (bidx >= S->neps[p])
+    p += 1;
+
+  beps = bidx;
+  if (p == 0)
+    leps = 0;
+  else
+    leps = S->neps[p-1];
+
+  while (eidx > leps)
+    { sprintf(S->name+S->nlen,"%d",p+1);
+      f = open(S->name,O_RDONLY);
+      lseek(f,sizeof(int)+sizeof(int64),SEEK_SET);
+
+      if (eidx > S->neps[p])
+        end = S->neps[p]-leps;
+      else
+        end = eidx-leps;
+      beg = beps - leps;
+
+      end *= S->pbyte;
+      beg *= S->pbyte;
+      if (beg > 0)
+        lseek(f,beg,SEEK_CUR);
+
+      while (beg < end)
+        { if (beg+buflen > end)
+            len = end-beg;
+          else
+            len = buflen;
+          read(f,buffer,len);
+          if (write(g,buffer,len) < 0)
+            return (1);
+          beg += len;
+        }
+
+      close(f);
+
+      beps = leps = S->neps[p++];
+    }
+
+  free(S->name);
+  S->name = name;
+
+  lseek(g,0,SEEK_SET);
+  S->copn = g;
+  S->part = 0;
+  S->cidx = bidx;
+  S->cpre = bpre;
+  S->nels = eidx;
+  More_Kmer_Stream(S);
+
+  return (0);
+}
+
+Kmer_Stream *Clone_Kmer_Cache(Kmer_Stream *O, int64 fidx, int64 bidx, int bpre)
+{ _Kmer_Stream *S;
+  int copn;
+
+  S = Malloc(sizeof(_Kmer_Stream),"Allocating table record");
+  if (S == NULL)
+    exit (1);
+
+  *S = *STREAM(O);
+  S->clone = 1;
+
+  S->table = Malloc(STREAM_BLOCK*S->pbyte,"Allocating k-mer buffer\n");
+
+  //  Set position to beginning
+
+  copn = open(S->name,O_RDONLY);
+  lseek(copn,(bidx-fidx)*S->pbyte,SEEK_SET);
+
+  S->copn  = copn;
+  S->cidx  = bidx;
+  S->cpre  = bpre;
+
+  More_Kmer_Stream(S);
+
+  return ((Kmer_Stream *) S);
+}
+
+void Free_Kmer_Cache(Kmer_Stream *_S, int bpre)
+{ _Kmer_Stream *S = STREAM(_S);
+
+  if (!S->clone)
+    { free(S->neps);
+      free(S->index + bpre);
+      free(S->inver);
+    }
+  free(S->table);
+  if (S->copn >= 0)
+    close(S->copn);
+  if (!S->clone)
+    { unlink(S->name);
+      free(S->name);
+    }
+  free(S);
+}
+
 
 /****************************************************************************************
  *
@@ -990,6 +1170,7 @@ inline void Next_Kmer_Entry(Kmer_Stream *_S)
         }
       More_Kmer_Stream(S);
     }
+
   while (S->index[S->cpre] <= S->cidx)
     S->cpre += 1;
 }
@@ -1147,10 +1328,7 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
 
   uint8  kbuf[hbyte];
   int    p, f;
-  int64  l, r, m, lo;
-
-  if (S->part <= S->nthr)
-    close(S->copn);
+  int64  l, r, m, lo, hi;
 
   m = *entry++;
   for (l = 1; l < ibyte; l++)
@@ -1161,17 +1339,25 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
   else
     l = index[m-1];
   if (l >= S->nels)
-    { S->csuf = NULL;
+    { if (S->part <= S->nthr)
+        close(S->copn);
+      S->csuf = NULL;
       S->cidx = S->nels;
       S->cpre = S->ixlen;
       S->part = S->nthr+1;
       return (0);
     }
-  while (index[m] == l)
-    m += 1;
   r = index[m];
+  if (r <= l)
+    { GoTo_Kmer_Index(_S,l);
+      return (0);
+    }
   S->cpre = m;
 
+  if (S->part <= S->nthr)
+    close(S->copn);
+
+  hi = r;
   lo = 0;
   for (p = 1; p <= S->nthr; p++)
     { if (l < S->neps[p-1])
@@ -1200,7 +1386,8 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
     }
 
   if (l >= S->nels)
-    { S->csuf = NULL;
+    { close(S->copn);
+      S->csuf = NULL;
       S->cidx = S->nels;
       S->cpre = S->ixlen;
       S->part = S->nthr+1;
@@ -1212,7 +1399,7 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
   More_Kmer_Stream(S);
   S->cidx = l + lo;
 
-  while (S->csuf != NULL)
+  while (S->cidx < hi)
     { m = mycmp(S->csuf,entry,hbyte);
       if (m >= 0)
         return (m == 0);
@@ -1228,6 +1415,28 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
  *
  *****************************************************************************************/
 
+typedef struct
+  { int    kmer;     //  Kmer length
+    int    nparts;   //  # of threads/parts for the profiles
+    int    nreads;   //  total # of reads in data set
+    int64 *nbase;    //  nbase[i] for i in [0,nparts) = id of last read in part i + 1
+    int64 *index;    //  index[i] for i in [0,nreads) = offset in relevant part of
+                     //    compressed profile for read i
+                  //  hidden parts
+    int    clone;    //  set if a clone
+    int    cfile;    //  current open part file (-1 if none)
+    int    cpart;    //  index of current open part (-1 if none)
+    int    nlen;     //  length of part prefix
+    char  *name;     //  part file name prefix
+    uint8 *count;    //  decompression buffer
+  } _Profile_Index;
+
+#define PROF_BUF0 4096
+#define PROF_BUF1 4095
+
+#define PROFILE(P) ((_Profile_Index *) P)
+
+
 /****************************************************************************************
  *
  *  Open a profile as a Profile_Index.  Index to compressed profiles is in memory,
@@ -1236,10 +1445,10 @@ int GoTo_Kmer_Entry(Kmer_Stream *_S, uint8 *entry)
  *****************************************************************************************/
 
 Profile_Index *Open_Profiles(char *name)
-{ Profile_Index *P;
-  int            kmer, nparts;
-  int64          nreads, *nbase, *index;
-  int           *nfile;
+{ _Profile_Index *P;
+  int             kmer, nparts;
+  int64           nreads, *nbase, *index;
+  uint8          *count;
 
   int    f, x;
   char  *dir, *root, *full;
@@ -1286,11 +1495,11 @@ Profile_Index *Open_Profiles(char *name)
 
   //  Allocate in-memory table
 
-  P     = Malloc(sizeof(Profile_Index),"Allocating profile record");
+  P     = Malloc(sizeof(_Profile_Index),"Allocating profile record");
   index = Malloc((nreads+1)*sizeof(int64),"Allocating profile index");
   nbase = Malloc(nparts*sizeof(int64),"Allocating profile index");
-  nfile = Malloc(nparts*sizeof(FILE *),"Allocating profile index");
-  if (P == NULL || index == NULL || nbase == NULL || nfile == NULL)
+  count = Malloc(PROF_BUF0,"Allocating profile index");
+  if (P == NULL || index == NULL || nbase == NULL || count == NULL)
     exit (1);
 
   nreads = 0;
@@ -1312,19 +1521,48 @@ Profile_Index *Open_Profiles(char *name)
         { fprintf(stderr,"Profile part %s is misssing ?\n",full);
           exit (1);
         }
-      nfile[nparts] = f;
+      close(f);
     }
-
-  free(full);
 
   P->kmer   = kmer;
   P->nparts = nparts;
   P->nreads = nreads;
   P->index  = index;
   P->nbase  = nbase;
-  P->nfile  = nfile;
 
-  return (P);
+  P->clone  = 0;
+  P->name   = full;
+  P->nlen   = x;
+  P->cpart  = -1;
+  P->cfile  = -1;
+  P->count  = count;
+
+  return ((Profile_Index *) P);
+}
+
+Profile_Index *Clone_Profiles(Profile_Index *P)
+{ _Profile_Index *Q;
+  uint8          *count;
+  char           *name;
+
+  //  Allocate in-memory table
+
+  Q     = Malloc(sizeof(_Profile_Index),"Allocating profile record");
+  count = Malloc(PROF_BUF0,"Allocating profile index");
+  name  = Malloc(PROFILE(P)->nlen + 20,"Allocating profile index");
+  if (Q == NULL || count == NULL || name == NULL)
+    exit (1);
+
+  *Q = *PROFILE(P);
+  strncpy(name,PROFILE(P)->name,Q->nlen);
+
+  Q->clone = 1;
+  Q->cpart = -1;
+  Q->cfile = -1;
+  Q->count = count;
+  Q->name  = name;
+
+  return ((Profile_Index *) Q);
 }
 
 /****************************************************************************************
@@ -1335,14 +1573,17 @@ Profile_Index *Open_Profiles(char *name)
 
 #undef SHOW_RUN
 
-void Free_Profiles(Profile_Index *P)
-{ int i;
+void Free_Profiles(Profile_Index *_P)
+{ _Profile_Index *P = PROFILE(_P);
 
-  free(P->index);
-  free(P->nbase);
-  for (i = 0; i < P->nparts; i++)
-    close(P->nfile[i]);
-  free(P->nfile);
+  if (!P->clone)
+    { free(P->index);
+      free(P->nbase);
+    }
+  if (P->cfile >= 0)
+    close(P->cfile);
+  free(P->name);
+  free(P->count);
   free(P);
 }
 
@@ -1350,11 +1591,10 @@ void Free_Profiles(Profile_Index *P)
   //    Returns the length of the uncompressed profile.  If the plen is less than
   //    this then only the first plen counts are uncompressed into profile
 
-#define PROF_BUF0 4096
-#define PROF_BUF1 4095
+int Fetch_Profile(Profile_Index *_P, int64 id, int plen, uint16 *profile)
+{ _Profile_Index *P = PROFILE(_P);
 
-int Fetch_Profile(Profile_Index *P, int64 id, int plen, uint16 *profile)
-{ uint8 count[PROF_BUF0], *cend = count+PROF_BUF1;
+  uint8 *count, *cend;
   int    f;
   int    w, len;
   uint8 *p, *q;
@@ -1368,7 +1608,20 @@ int Fetch_Profile(Profile_Index *P, int64 id, int plen, uint16 *profile)
     { fprintf(stderr,"Id %lld is out of range [1,%lld]\n",id,P->nbase[P->nparts-1]);
       exit (1);
     }
-  f = P->nfile[w];
+
+  if (w != P->cpart)
+    { if (P->cfile >= 0)
+        close(P->cfile);
+      sprintf(P->name+P->nlen,"prof.%d",w+1);
+      f = open(P->name,O_RDONLY);
+      if (f < 0)
+        { fprintf(stderr,"Profile part %s is misssing ?\n",P->name);
+          exit (1);
+        }
+      P->cfile = f;
+      P->cpart = w;
+    }
+  f = P->cfile;
 
   if (id == 0 || (w > 0 && id == P->nbase[w-1]))
     { lseek(f,0,SEEK_SET);
@@ -1382,6 +1635,9 @@ int Fetch_Profile(Profile_Index *P, int64 id, int plen, uint16 *profile)
 
   if (len == 0)
     return (len);
+
+  count = P->count;
+  cend  = count + PROF_BUF1;
 
   read(f,count,PROF_BUF0);
 
